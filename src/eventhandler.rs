@@ -32,7 +32,7 @@ fn is_detach_event(evtg: UINT, params: LPVOID) -> bool {
 pub(crate) extern "system" fn _event_handler_window_proc<T: EventHandler>(tag: LPVOID, _he: ::capi::scdom::HELEMENT, evtg: UINT, params: LPVOID) -> BOOL
 {
 	let boxed = tag as *mut WindowHandler<T>;
-	let tuple: &mut WindowHandler<T> = unsafe { &mut *boxed };
+	let tuple: &mut WindowHandler<T> = unsafe {boxed.as_mut().unwrap()};
 
 	let hroot: HELEMENT = if let Ok(root) = ::dom::Element::from_window(tuple.hwnd) {
 		root.as_ptr()
@@ -57,7 +57,7 @@ pub(crate) extern "system" fn _event_handler_window_proc<T: EventHandler>(tag: L
 pub(crate) extern "system" fn _event_handler_behavior_proc(tag: LPVOID, he: HELEMENT, evtg: UINT, params: LPVOID) -> BOOL {
 	// reconstruct pointer to Handler
 	let boxed = tag as *mut BoxedHandler;
-	let me = unsafe { &mut *boxed };
+	let me = unsafe { boxed.as_mut().unwrap() };
 	let me = &mut *me.handler;
 
 	if is_detach_event(evtg, params) {
@@ -77,7 +77,7 @@ pub(crate) extern "system" fn _event_handler_proc<T: EventHandler>(tag: LPVOID, 
 {
 	// reconstruct pointer to Handler
 	let boxed = tag as *mut T;
-	let me = unsafe { &mut *boxed };
+	let me = unsafe { boxed.as_mut().unwrap() };
 
 	if is_detach_event(evtg, params) {
 		me.detached(he);
@@ -109,7 +109,7 @@ fn process_events(me: &mut dyn EventHandler, he: HELEMENT, evtg: UINT, params: L
 		EVENT_GROUPS::SUBSCRIPTIONS_REQUEST => {
 			assert!(!params.is_null());
 			let scnm = params as *mut EVENT_GROUPS;
-			let nm = unsafe {&mut *scnm};
+			let nm = unsafe {scnm.as_mut().unwrap()};
 			let handled = me.get_subscription();
 			if let Some(needed) = handled {
 				*nm = needed;
@@ -120,7 +120,7 @@ fn process_events(me: &mut dyn EventHandler, he: HELEMENT, evtg: UINT, params: L
 		EVENT_GROUPS::HANDLE_INITIALIZATION => {
 			assert!(!params.is_null());
 			let scnm = params as *mut INITIALIZATION_PARAMS;
-			let nm = unsafe { &mut *scnm };
+			let nm = unsafe { scnm.as_mut().unwrap() };
 			match nm.cmd {
 				INITIALIZATION_EVENTS::BEHAVIOR_DETACH => {
 					me.detached(he);
@@ -136,7 +136,7 @@ fn process_events(me: &mut dyn EventHandler, he: HELEMENT, evtg: UINT, params: L
 		EVENT_GROUPS::HANDLE_SOM => {
 			assert!(!params.is_null());
 			let scnm = params as *mut SOM_PARAMS;
-			let nm = unsafe { &mut *scnm };
+			let nm = unsafe { scnm.as_mut().unwrap() };
 			match nm.cmd {
 				SOM_EVENTS::SOM_GET_PASSPORT => {
 					if let Some(asset) = me.get_asset() {
@@ -159,9 +159,8 @@ fn process_events(me: &mut dyn EventHandler, he: HELEMENT, evtg: UINT, params: L
 		EVENT_GROUPS::HANDLE_BEHAVIOR_EVENT => {
 			assert!(!params.is_null());
 			let scnm = params as *const BEHAVIOR_EVENT_PARAMS;
-			let nm = unsafe { &*scnm };
-
-      use dom::event::EventReason;
+			let nm = unsafe{scnm.as_ref().unwrap()};
+			use dom::event::EventReason;
 			let code :BEHAVIOR_EVENTS = unsafe{ ::std::mem::transmute(nm.cmd & 0x0_0FFF) };
 			let phase: PHASE_MASK = unsafe { ::std::mem::transmute(nm.cmd & 0xFFFF_F000) };
 			let reason = match code {
@@ -203,7 +202,7 @@ fn process_events(me: &mut dyn EventHandler, he: HELEMENT, evtg: UINT, params: L
 		EVENT_GROUPS::HANDLE_SCRIPTING_METHOD_CALL => {
 			assert!(!params.is_null());
 			let scnm = params as *mut SCRIPTING_METHOD_PARAMS;
-			let nm = unsafe { &mut *scnm };
+			let nm = unsafe { scnm.as_mut().unwrap() };
 			let name = u2s!(nm.name);
 			let argv = unsafe { Value::unpack_from(nm.argv, nm.argc) };
 			let rv = me.on_script_call(he, &name, &argv);
@@ -244,7 +243,7 @@ fn process_events(me: &mut dyn EventHandler, he: HELEMENT, evtg: UINT, params: L
           SET_VALUE => {
             // Value from Sciter.
             let payload = params as *const VALUE_PARAMS;
-            let pm = unsafe { & *payload };
+            let pm = unsafe { payload.as_ref().unwrap() };
             MethodParams::SetValue(Value::from(&pm.value))
           },
 
@@ -263,13 +262,13 @@ fn process_events(me: &mut dyn EventHandler, he: HELEMENT, evtg: UINT, params: L
         match code {
           GET_VALUE => {
             let payload = params as *mut VALUE_PARAMS;
-            let pm = unsafe { &mut *payload };
+            let pm = unsafe { payload.as_mut().unwrap() };
             method_value.pack_to(&mut pm.value);
           },
 
           IS_EMPTY => {
             let payload = params as *mut IS_EMPTY_PARAMS;
-            let pm = unsafe { &mut *payload };
+            let pm = unsafe { payload.as_mut().unwrap() };
             pm.is_empty = is_empty as UINT;
           },
 
@@ -283,7 +282,7 @@ fn process_events(me: &mut dyn EventHandler, he: HELEMENT, evtg: UINT, params: L
 		EVENT_GROUPS::HANDLE_TIMER => {
 			assert!(!params.is_null());
 			let scnm = params as *const TIMER_PARAMS;
-			let nm = unsafe { & *scnm };
+			let nm = unsafe { scnm.as_ref().unwrap() };
 			let handled = me.on_timer(he, nm.timerId as u64);
 			handled
 		},
@@ -291,7 +290,7 @@ fn process_events(me: &mut dyn EventHandler, he: HELEMENT, evtg: UINT, params: L
 		EVENT_GROUPS::HANDLE_DRAW => {
 			assert!(!params.is_null());
 			let scnm = params as *const DRAW_PARAMS;
-			let nm = unsafe { & *scnm };
+			let nm = unsafe { scnm.as_ref().unwrap() };
 			let handled = me.on_draw(he, nm.gfx, &nm.area, nm.layer);
 			handled
 		},
